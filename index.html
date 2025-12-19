@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Vocab Vortex (Free Edition) | Je Parle English</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+    <style>
+        body {
+            background-color: #050505;
+            color: white;
+            font-family: 'Rajdhani', sans-serif;
+            overflow: hidden;
+            user-select: none;
+            touch-action: none;
+        }
+
+        .retro-font { font-family: 'Press Start 2P', cursive; }
+
+        /* Effects */
+        .scanlines {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.2));
+            background-size: 100% 4px; z-index: 50; pointer-events: none;
+        }
+        .stars {
+            position: absolute; width: 100%; height: 100%;
+            background: #000 url('https://www.script-tutorials.com/demos/360/images/stars.png') repeat top center;
+            z-index: -1; animation: starsMove 100s linear infinite;
+        }
+        @keyframes starsMove { from {background-position:0 0;} to {background-position:0 10000px;} }
+
+        /* Game Objects */
+        .asteroid {
+            position: absolute; width: 120px; height: 120px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            text-align: center; z-index: 10; transition: transform 0.1s;
+        }
+        .asteroid.locked { transform: scale(1.2); z-index: 15; } /* Grow when being typed */
+        
+        .asteroid-shape {
+            width: 100%; height: 100%; position: absolute; top: 0; left: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M20,10 L80,5 L95,40 L85,90 L40,95 L5,70 Z' fill='%23311B92' stroke='%237C4DFF' stroke-width='3'/%3E%3C/svg%3E");
+            background-size: contain; background-repeat: no-repeat;
+            filter: drop-shadow(0 0 5px rgba(124, 77, 255, 0.5));
+            animation: spin 8s linear infinite;
+        }
+        .key-badge {
+            background: #00E676; color: #000; border: 2px solid #FFF;
+            width: 24px; height: 24px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-family: 'Press Start 2P'; font-size: 10px;
+            position: absolute; top: -5px; left: 50%; transform: translateX(-50%);
+            box-shadow: 0 0 10px #00E676; z-index: 20;
+        }
+        .word-label {
+            position: relative; z-index: 20; background: rgba(0,0,0,0.85);
+            padding: 4px 8px; border-radius: 6px; border: 2px solid #D500F9;
+            font-weight: bold; font-size: 16px; text-shadow: 1px 1px 0 #000;
+            margin-top: 5px; max-width: 140px; word-wrap: break-word;
+            box-shadow: 0 4px 0 rgba(0,0,0,0.5);
+        }
+        .word-matched { color: #00E676; text-shadow: 0 0 5px #00E676; } /* Typed letters turn green */
+        
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .spaceship {
+            position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%);
+            width: 60px; height: 60px; z-index: 20;
+            filter: drop-shadow(0 0 10px #00e5ff); transition: left 0.1s linear;
+        }
+        
+        /* Typing Input Visualizer */
+        .typing-buffer {
+            position: absolute; bottom: 170px; left: 50%; transform: translateX(-50%);
+            color: #00E676; font-family: 'Press Start 2P'; font-size: 20px;
+            text-shadow: 0 0 10px #00E676; z-index: 30; pointer-events: none;
+            background: rgba(0,0,0,0.7); padding: 5px 10px; border-radius: 5px;
+            display: none;
+        }
+        .typing-buffer.active { display: block; }
+
+        .laser {
+            position: absolute; width: 4px; background: #00e5ff;
+            box-shadow: 0 0 10px #00e5ff; transform-origin: bottom center; z-index: 5;
+        }
+        .particle {
+            position: absolute; width: 8px; height: 8px; background: #D500F9;
+            border-radius: 50%; pointer-events: none;
+        }
+
+        /* On-Screen Keypad */
+        .keypad-container {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+            display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px;
+            z-index: 45; width: 95%; max-width: 600px;
+        }
+        .keypad-btn {
+            background: rgba(0, 230, 118, 0.2); border: 2px solid #00E676;
+            color: #00E676; font-family: 'Press Start 2P'; font-size: 16px;
+            aspect-ratio: 1; border-radius: 8px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.1s; text-shadow: 0 0 5px #00E676;
+        }
+        .keypad-btn:active { background: #00E676; color: black; transform: scale(0.95); }
+
+        /* UI */
+        .panel {
+            background: rgba(15, 23, 42, 0.98); border: 2px solid #D500F9;
+            box-shadow: 0 0 30px rgba(213, 0, 249, 0.2); backdrop-filter: blur(10px);
+        }
+        .btn-retro {
+            background: #D500F9; color: #fff; border: none;
+            clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+            transition: all 0.2s; text-transform: uppercase; font-weight: bold; cursor: pointer;
+        }
+        .btn-retro:hover { background: #AA00FF; box-shadow: 0 0 15px #D500F9; transform: translateY(-2px); }
+        .btn-retro.secondary { background: #475569; clip-path: none; border-radius: 4px; }
+        .btn-retro.secondary:hover { background: #64748b; box-shadow: none; }
+        
+        textarea, input, select { outline: none; transition: border 0.3s; }
+        textarea:focus, input:focus, select:focus { border-color: #D500F9; }
+        
+        .saved-badge { display: none; color: #00E676; font-size: 0.7rem; margin-left: 10px; animation: fadeOut 2s forwards; }
+        @keyframes fadeOut { 0% { opacity: 1; } 100% { opacity: 0; } }
+
+    </style>
+</head>
+<body>
+
+    <div class="scanlines"></div>
+    <div class="stars"></div>
+
+    <!-- HUD -->
+    <div class="fixed top-0 left-0 w-full p-2 md:p-4 flex justify-between items-center z-40 pointer-events-none bg-black/50 backdrop-blur-sm border-b border-purple-900/50">
+        <div class="flex items-center gap-3">
+            <div>
+                <h1 class="text-xl md:text-3xl font-bold italic tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500" style="filter: drop-shadow(0 0 5px purple);">VOCAB VORTEX</h1>
+                <div class="text-[10px] text-purple-300 font-bold uppercase tracking-widest">by Je Parle English (Free Edition)</div>
+            </div>
+            <div class="px-2 py-1 border border-purple-500 text-purple-400 text-xs font-mono rounded bg-purple-900/30">Free Edition</div>
+        </div>
+        <div class="flex gap-4 md:gap-8">
+            <div class="text-right">
+                <div class="text-[8px] md:text-[10px] text-purple-400 uppercase tracking-widest">Score</div>
+                <div class="text-xl md:text-3xl font-bold retro-font text-white" id="scoreDisplay">0000</div>
+            </div>
+            <div class="text-right">
+                <div class="text-[8px] md:text-[10px] text-red-400 uppercase tracking-widest">Shields</div>
+                <div class="text-xl md:text-3xl font-bold retro-font text-white flex gap-1" id="livesDisplay">
+                    <i class="fa-solid fa-heart text-red-500"></i>
+                    <i class="fa-solid fa-heart text-red-500"></i>
+                    <i class="fa-solid fa-heart text-red-500"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Area -->
+    <div id="gameContainer" class="absolute inset-0 overflow-hidden pb-24">
+        <div id="spaceship" class="spaceship">
+            <svg viewBox="0 0 100 100" fill="none">
+                <path d="M50 0L90 80L50 70L10 80L50 0Z" fill="#ECEFF1"/>
+                <path d="M50 0L90 80L50 70V0Z" fill="#CFD8DC"/>
+                <circle cx="50" cy="50" r="10" fill="#D500F9"/>
+                <path d="M10 80L20 95M90 80L80 95" stroke="#00E676" stroke-width="4"/>
+            </svg>
+        </div>
+        <!-- Typing Buffer Display -->
+        <div id="typingBuffer" class="typing-buffer"></div>
+        
+        <div id="laserContainer"></div>
+        <div id="asteroidContainer"></div>
+    </div>
+
+    <!-- Mobile Keypad -->
+    <div id="mobileKeypad" class="keypad-container">
+        <button class="keypad-btn" ontouchstart="game.handleInput(1)" onclick="game.handleInput(1)">1</button>
+        <button class="keypad-btn" ontouchstart="game.handleInput(2)" onclick="game.handleInput(2)">2</button>
+        <button class="keypad-btn" ontouchstart="game.handleInput(3)" onclick="game.handleInput(3)">3</button>
+        <button class="keypad-btn" ontouchstart="game.handleInput(4)" onclick="game.handleInput(4)">4</button>
+        <button class="keypad-btn" ontouchstart="game.handleInput(5)" onclick="game.handleInput(5)">5</button>
+        <button class="keypad-btn" ontouchstart="game.handleInput(6)" onclick="game.handleInput(6)">6</button>
+        <button class="keypad-btn" ontouchstart="game.handleInput(7)" onclick="game.handleInput(7)">7</button>
+        <button class="keypad-btn" ontouchstart="game.handleInput(8)" onclick="game.handleInput(8)">8</button>
+        <button class="keypad-btn" ontouchstart="game.handleInput(9)" onclick="game.handleInput(9)">9</button>
+    </div>
+
+    <!-- Menu Screen -->
+    <div id="menuScreen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm">
+        <div class="panel max-w-6xl w-full p-4 md:p-8 rounded-xl grid grid-cols-1 lg:grid-cols-2 gap-6 relative max-h-[95vh] overflow-y-auto">
+            
+            <!-- Left: Word Management -->
+            <div class="flex flex-col h-full">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-2xl font-bold text-purple-400 retro-font">DATABASE</h2>
+                    <span id="saveBadge" class="saved-badge">SAVED TO BROWSER!</span>
+                </div>
+
+                <div class="flex gap-2 mb-2">
+                    <select id="themeSelect" onchange="game.loadTheme()" class="flex-1 bg-slate-800 border border-slate-600 rounded p-2 text-white text-sm">
+                        <!-- Options populated via JS -->
+                    </select>
+                </div>
+
+                <div class="flex gap-2 mb-4">
+                      <button onclick="game.saveCustomList()" class="flex-1 btn-retro secondary px-2 py-2 text-xs" title="Quick Save (Browser Only)">
+                        <i class="fa-solid fa-floppy-disk mr-2"></i>Quick Save
+                    </button>
+                    <button onclick="game.exportList()" class="flex-1 btn-retro secondary px-2 py-2 text-xs" title="Download as File">
+                        <i class="fa-solid fa-download mr-2"></i>Export File
+                    </button>
+                    <button onclick="document.getElementById('fileInput').click()" class="flex-1 btn-retro secondary px-2 py-2 text-xs" title="Load from File">
+                        <i class="fa-solid fa-upload mr-2"></i>Import File
+                    </button>
+                    <input type="file" id="fileInput" accept=".txt" class="hidden" onchange="game.importList(this)">
+                </div>
+
+                <textarea id="wordListInput" class="flex-1 bg-black/40 border border-slate-600 rounded p-4 text-green-400 font-mono text-sm resize-none mb-4 focus:bg-black/60 min-h-[150px]" placeholder="Type words here (one per line)..."></textarea>
+                
+                <div class="bg-slate-800 p-3 rounded text-xs text-gray-400 hidden md:block">
+                    <strong>Instructions:</strong> Press 1-9 for rapid fire OR type the word to practice spelling!
+                </div>
+            </div>
+
+            <!-- Right: Launch Controls -->
+            <div class="flex flex-col justify-between border-t lg:border-t-0 lg:border-l border-slate-700 pt-6 lg:pt-0 lg:pl-8">
+                <div>
+                    <h3 class="text-xl font-bold text-white mb-6"><i class="fa-solid fa-rocket mr-2"></i> Mission Config</h3>
+                    
+                    <div class="mb-8">
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="text-xs font-bold text-purple-200 uppercase">Warp Speed</label>
+                            <span id="speedDisplay" class="text-yellow-400 retro-font text-xs">1.0x</span>
+                        </div>
+                        <input type="range" id="speedInput" min="1" max="5" value="2" oninput="game.updateSpeedUI()" class="w-full h-2 bg-gray-700 rounded-lg cursor-pointer">
+                        <div class="flex justify-between text-xs text-gray-500 mt-1 font-mono">
+                            <span>Slow</span><span>Extreme</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-purple-900/20 border border-purple-500/30 rounded p-4 text-sm text-purple-200">
+                        <h4 class="font-bold mb-2 text-yellow-400">DUAL MODES ACTIVE:</h4>
+                        <ul class="list-disc list-inside space-y-1 opacity-80 mb-2">
+                            <li><strong>Rapid Mode:</strong> Press 1-9 to blast immediately.</li>
+                            <li><strong>Spelling Mode:</strong> Type the letters to destroy the word.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <button onclick="game.start()" class="btn-retro w-full py-5 text-xl md:text-2xl mt-4 tracking-widest shadow-lg">
+                    START GAME
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="gameOverScreen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-red-900/95 hidden">
+        <div class="panel max-w-2xl w-full p-8 rounded-xl text-center border-red-500 shadow-red-900/50 flex flex-col max-h-[90vh]">
+            <h2 class="text-3xl md:text-4xl font-bold text-red-500 mb-2 retro-font animate-pulse">MISSION FAILED</h2>
+            <p class="text-white text-lg mb-2">The vortex consumed the ship.</p>
+            <div class="text-4xl font-bold text-white mb-8 retro-font" id="finalScore">0000</div>
+            
+            <div class="text-left bg-black/40 rounded p-4 mb-6 overflow-y-auto flex-1 border border-red-500/30">
+                <h3 class="text-red-300 font-bold text-sm uppercase mb-2 border-b border-red-500/30 pb-1">Missed Words (Review These!)</h3>
+                <ul id="missedWordsList" class="grid grid-cols-2 gap-2 text-sm text-white font-mono">
+                    <!-- Injected via JS -->
+                </ul>
+            </div>
+            
+            <div class="flex gap-4">
+                <button onclick="game.reset()" class="btn-retro w-full py-3 bg-white text-red-900 hover:bg-gray-200" style="background:white; color:black;">
+                    MENU
+                </button>
+                <button onclick="game.restartSame()" class="btn-retro w-full py-3 bg-red-600 text-white hover:bg-red-500" style="background:#d32f2f; clip-path:none; border-radius:4px;">
+                    RETRY LIST
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="fixed bottom-1 w-full text-center pointer-events-none z-30">
+        <span class="text-[10px] text-gray-400 font-bold">Made with ❤️ for learners. &copy; 2025 Je Parle English.</span>
+    </div>
+
+    <script>
+        /* ================= GAME DATA (FREE EDITION: 3 Themes) ================= */
+        const themes = {
+            animals: ["Lion","Tiger","Bear","Cat","Dog","Horse","Duck","Monkey","Snake","Eagle"],
+            food: ["Pizza","Burger","Apple","Banana","Bread","Cheese","Milk","Cake","Water","Fruit"],
+            colors_shapes: ["Red","Blue","Green","Yellow","Pink","Black","White","Circle","Square","Star"]
+        };
+
+        const els = {
+            menu: document.getElementById('menuScreen'),
+            gameOver: document.getElementById('gameOverScreen'),
+            container: document.getElementById('asteroidContainer'),
+            lasers: document.getElementById('laserContainer'),
+            ship: document.getElementById('spaceship'),
+            score: document.getElementById('scoreDisplay'),
+            lives: document.getElementById('livesDisplay'),
+            finalScore: document.getElementById('finalScore'),
+            wordInput: document.getElementById('wordListInput'),
+            speedInput: document.getElementById('speedInput'),
+            themeSelect: document.getElementById('themeSelect'),
+            speedDisplay: document.getElementById('speedDisplay'),
+            missedList: document.getElementById('missedWordsList'),
+            keypad: document.getElementById('mobileKeypad'),
+            typingBuffer: document.getElementById('typingBuffer')
+        };
+
+        /* ================= ENGINE ================= */
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        const state = {
+            active: false,
+            score: 0,
+            lives: 3,
+            words: [],
+            asteroids: [],
+            spawnRate: 2000,
+            lastSpawn: 0,
+            speedMultiplier: 1,
+            availableKeys: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+            activeKeys: {},
+            missedWords: [],
+            currentTyped: "" // Stores letters typed by user
+        };
+
+        const game = {
+            init: () => {
+                // Populate Dropdown
+                els.themeSelect.innerHTML = '';
+                
+                // Custom Option
+                let opt = document.createElement('option');
+                opt.value = 'custom';
+                opt.text = "📝 Custom List (Full Feature)";
+                els.themeSelect.add(opt);
+
+                // Auto-generate options from data
+                for (const key in themes) {
+                    if (themes.hasOwnProperty(key)) {
+                        let opt = document.createElement('option');
+                        opt.value = key;
+                        // Format: "animals" -> "Animals (30)"
+                        const count = themes[key].length;
+                        const label = key.charAt(0).toUpperCase() + key.slice(1);
+                        opt.text = `${label} (${count})`;
+                        els.themeSelect.add(opt);
+                    }
+                }
+
+                // Check for saved custom list
+                const saved = localStorage.getItem('vocabVortex_custom');
+                if (saved) {
+                    themes.custom = JSON.parse(saved);
+                } else {
+                    themes.custom = ["Type", "Your", "Own", "Words", "Here"];
+                }
+                
+                // Select first theme by default (Animals)
+                els.themeSelect.value = 'animals';
+                game.loadTheme();
+                game.updateSpeedUI();
+            },
+
+            loadTheme: () => {
+                const theme = els.themeSelect.value;
+                if (theme === 'custom') {
+                    // Try load from local storage first
+                    const saved = localStorage.getItem('vocabVortex_custom');
+                    els.wordInput.value = saved ? JSON.parse(saved).join('\n') : "";
+                    els.wordInput.placeholder = "Type words here...";
+                } else {
+                    els.wordInput.value = themes[theme].join('\n');
+                }
+            },
+
+            updateSpeedUI: () => {
+                const val = parseFloat(els.speedInput.value);
+                const multiplier = val * 0.5;
+                els.speedDisplay.innerText = multiplier.toFixed(1) + 'x';
+            },
+
+            saveCustomList: () => {
+                const raw = els.wordInput.value.trim();
+                if (!raw) return;
+                const arr = raw.split('\n').filter(w => w.trim() !== '');
+                localStorage.setItem('vocabVortex_custom', JSON.stringify(arr));
+                themes.custom = arr;
+                
+                // Show badge
+                const badge = document.getElementById('saveBadge');
+                badge.innerText = "SAVED TO BROWSER!";
+                badge.style.display = 'inline';
+                badge.style.animation = 'none';
+                badge.offsetHeight; 
+                badge.style.animation = 'fadeOut 2s forwards';
+            },
+
+            exportList: () => {
+                const raw = els.wordInput.value.trim();
+                if (!raw) { alert("Nothing to export!"); return; }
+                
+                const blob = new Blob([raw], { type: "text/plain" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "My_Vocab_List.txt";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            },
+
+            importList: (input) => {
+                const file = input.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    els.wordInput.value = e.target.result;
+                    // Switch dropdown to custom so it doesn't get overwritten immediately
+                    els.themeSelect.value = 'custom';
+                };
+                reader.readAsText(file);
+                // Clear input so same file can be selected again
+                input.value = '';
+            },
+
+            start: () => {
+                const raw = els.wordInput.value.trim();
+                if (!raw) { alert("Please enter words!"); return; }
+                state.words = raw.split('\n').filter(w => w.trim() !== '');
+                
+                // Save custom list automatically on start if in custom mode
+                if (els.themeSelect.value === 'custom') game.saveCustomList();
+
+                state.speedMultiplier = parseInt(els.speedInput.value) * 0.5;
+                state.spawnRate = 3500 / state.speedMultiplier;
+                
+                // Reset
+                state.score = 0;
+                state.lives = 3;
+                state.missedWords = [];
+                state.asteroids.forEach(a => a.el.remove());
+                state.asteroids = [];
+                state.availableKeys = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+                state.activeKeys = {};
+                state.active = true;
+                state.currentTyped = "";
+
+                els.menu.classList.add('hidden');
+                els.gameOver.classList.add('hidden');
+                game.updateHUD();
+                game.updateTypingBuffer();
+                
+                lastTime = performance.now();
+                requestAnimationFrame(loop);
+                sfx.playStart();
+            },
+
+            reset: () => {
+                state.active = false;
+                els.gameOver.classList.add('hidden');
+                els.menu.classList.remove('hidden');
+            },
+
+            restartSame: () => {
+                // Quick restart with same settings
+                state.score = 0;
+                state.lives = 3;
+                state.missedWords = [];
+                state.asteroids.forEach(a => a.el.remove());
+                state.asteroids = [];
+                state.availableKeys = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+                state.activeKeys = {};
+                state.active = true;
+                state.currentTyped = "";
+                els.gameOver.classList.add('hidden');
+                game.updateHUD();
+                game.updateTypingBuffer();
+                requestAnimationFrame(loop);
+                sfx.playStart();
+            },
+
+            spawnAsteroid: () => {
+                if (state.availableKeys.length === 0) return;
+
+                const keyIdx = Math.floor(Math.random() * state.availableKeys.length);
+                const key = state.availableKeys.splice(keyIdx, 1)[0];
+                const word = state.words[Math.floor(Math.random() * state.words.length)];
+
+                const el = document.createElement('div');
+                el.className = 'asteroid';
+                el.innerHTML = `
+                    <div class="asteroid-shape"></div>
+                    <div class="key-badge">${key}</div>
+                    <div class="word-label">${word}</div>
+                `;
+                
+                const x = 10 + Math.random() * 80;
+                el.style.left = x + '%';
+                el.style.top = '-150px';
+                els.container.appendChild(el);
+
+                const asteroid = {
+                    id: Date.now() + Math.random(),
+                    key: key,
+                    word: word,
+                    x: x,
+                    y: -150,
+                    speed: (1 + Math.random() * 0.5) * state.speedMultiplier,
+                    el: el
+                };
+
+                state.asteroids.push(asteroid);
+                state.activeKeys[key] = asteroid;
+            },
+
+            destroyAsteroid: (asteroid) => {
+                createLaser(asteroid.x, asteroid.y);
+                createExplosion(asteroid.x, asteroid.y);
+                sfx.playLaser();
+
+                state.score += 100;
+                game.removeAsteroid(asteroid, true);
+                game.updateHUD();
+                
+                // Clear typing if we destroyed a word
+                state.currentTyped = "";
+                game.updateTypingBuffer();
+            },
+
+            removeAsteroid: (asteroid, recycleKey) => {
+                asteroid.el.remove();
+                state.asteroids = state.asteroids.filter(a => a !== asteroid);
+                if (recycleKey) {
+                    delete state.activeKeys[asteroid.key];
+                    state.availableKeys.push(asteroid.key);
+                }
+            },
+
+            adjustSpeed: (delta) => {
+                state.speedMultiplier = Math.max(0.5, Math.min(5, state.speedMultiplier + delta));
+                state.spawnRate = 3500 / state.speedMultiplier;
+                els.speedDisplay.innerText = state.speedMultiplier.toFixed(1) + 'x';
+                
+                // Visual feedback on speed change
+                els.speedDisplay.style.color = delta > 0 ? '#ff4444' : '#00e676';
+                setTimeout(() => els.speedDisplay.style.color = '#fbbf24', 500);
+            },
+
+            damage: (word) => {
+                state.lives--;
+                state.missedWords.push(word); // Add to report
+                game.updateHUD();
+                sfx.playHit();
+                
+                document.body.style.transform = "translate(5px, 5px)";
+                setTimeout(() => document.body.style.transform = "translate(-5px, -5px)", 50);
+                setTimeout(() => document.body.style.transform = "none", 100);
+
+                // Reset typing on damage
+                state.currentTyped = "";
+                game.updateTypingBuffer();
+
+                if (state.lives <= 0) game.endGame();
+            },
+
+            updateHUD: () => {
+                els.score.innerText = state.score.toString().padStart(4, '0');
+                let hearts = '';
+                for(let i=0; i<state.lives; i++) hearts += '<i class="fa-solid fa-heart text-red-500"></i>';
+                els.lives.innerHTML = hearts;
+            },
+
+            endGame: () => {
+                state.active = false;
+                els.finalScore.innerText = state.score;
+                
+                // Populate Report
+                els.missedList.innerHTML = '';
+                if(state.missedWords.length === 0) {
+                    els.missedList.innerHTML = '<li class="col-span-2 text-center text-green-400">Perfect! No words missed.</li>';
+                } else {
+                    // Deduplicate
+                    const uniqueMissed = [...new Set(state.missedWords)];
+                    uniqueMissed.forEach(w => {
+                        els.missedList.innerHTML += `<li>• ${w}</li>`;
+                    });
+                }
+                
+                els.gameOver.classList.remove('hidden');
+            },
+
+            handleInput: (key) => {
+                if (!state.active) return;
+                // Number logic
+                if (state.activeKeys[key]) {
+                    const targetX = state.activeKeys[key].x;
+                    els.ship.style.transition = "left 0.1s";
+                    els.ship.style.left = targetX + '%';
+                    game.destroyAsteroid(state.activeKeys[key]);
+                }
+            },
+
+            // --- SPELLING ENGINE ---
+            handleTyping: (char) => {
+                if (!state.active) return;
+                
+                // Add char
+                state.currentTyped += char;
+                game.updateTypingBuffer();
+
+                // Find matches
+                let matchFound = false;
+                let fullMatch = null;
+
+                state.asteroids.forEach(a => {
+                    const word = a.word.toUpperCase();
+                    // Check if current typed matches start of this word
+                    if (word.startsWith(state.currentTyped)) {
+                        matchFound = true;
+                        
+                        // Highlight Logic
+                        const label = a.el.querySelector('.word-label');
+                        const typedPart = word.substring(0, state.currentTyped.length);
+                        const restPart = word.substring(state.currentTyped.length);
+                        label.innerHTML = `<span class="word-matched">${typedPart}</span>${restPart}`;
+                        a.el.classList.add('locked');
+
+                        // Full Match?
+                        if (state.currentTyped === word) {
+                            fullMatch = a;
+                        }
+                    } else {
+                        // Reset formatting if not matching anymore
+                        a.el.querySelector('.word-label').innerText = a.word;
+                        a.el.classList.remove('locked');
+                    }
+                });
+
+                if (fullMatch) {
+                    // Success!
+                    game.destroyAsteroid(fullMatch);
+                } else if (!matchFound) {
+                    // Penalty/Reset
+                    sfx.playHit(); // Buzz sound for wrong letter
+                    state.currentTyped = "";
+                    game.updateTypingBuffer();
+                    // Reset all visuals
+                    state.asteroids.forEach(a => {
+                        a.el.querySelector('.word-label').innerText = a.word;
+                        a.el.classList.remove('locked');
+                    });
+                }
+            },
+
+            updateTypingBuffer: () => {
+                if (state.currentTyped.length > 0) {
+                    els.typingBuffer.innerText = state.currentTyped;
+                    els.typingBuffer.classList.add('active');
+                } else {
+                    els.typingBuffer.classList.remove('active');
+                }
+            }
+        };
+
+        let lastTime = 0;
+        function loop(timestamp) {
+            if (!state.active) return;
+            const dt = timestamp - lastTime;
+            lastTime = timestamp;
+
+            if (timestamp - state.lastSpawn > state.spawnRate) {
+                game.spawnAsteroid();
+                state.lastSpawn = timestamp;
+            }
+
+            const windowHeight = window.innerHeight;
+            
+            for (let i = state.asteroids.length - 1; i >= 0; i--) {
+                const a = state.asteroids[i];
+                a.y += a.speed * (dt / 16); 
+                a.el.style.transform = `translateY(${a.y}px)`;
+
+                if (a.y > windowHeight - 180) { // Adjusted for mobile keypad
+                    game.damage(a.word);
+                    createExplosion(a.x, a.y);
+                    game.removeAsteroid(a, true);
+                }
+            }
+            requestAnimationFrame(loop);
+        }
+
+        // --- VISUALS ---
+        function createLaser(targetX, targetY) {
+            const beam = document.createElement('div');
+            beam.className = 'laser';
+            beam.style.left = '50%';
+            beam.style.bottom = '100px';
+            const deg = (targetX - 50) * 0.8;
+            beam.style.transform = `rotate(${deg}deg)`;
+            beam.style.height = '120vh'; 
+            els.lasers.appendChild(beam);
+            setTimeout(() => beam.remove(), 100);
+        }
+
+        function createExplosion(xPct, yPx) {
+            const el = document.createElement('div');
+            el.style.position = 'absolute';
+            el.style.left = xPct + '%';
+            el.style.top = yPx + 'px';
+            el.style.zIndex = 100;
+            els.container.appendChild(el);
+
+            for(let i=0; i<8; i++) {
+                const p = document.createElement('div');
+                p.className = 'particle';
+                const angle = Math.random() * Math.PI * 2;
+                const tx = Math.cos(angle) * 60;
+                const ty = Math.sin(angle) * 60;
+                p.style.transition = 'all 0.4s ease-out';
+                el.appendChild(p);
+                requestAnimationFrame(() => {
+                    p.style.transform = `translate(${tx}px, ${ty}px)`;
+                    p.style.opacity = 0;
+                });
+            }
+            setTimeout(() => el.remove(), 500);
+        }
+
+        // --- INPUT ---
+        document.addEventListener('keydown', (e) => {
+            if (!state.active) {
+                // If game over, 'R' to retry
+                if (e.key.toLowerCase() === 'r' && !els.gameOver.classList.contains('hidden')) game.restartSame();
+                return;
+            }
+            
+            // Speed Controls
+            if (e.key === 'ArrowUp') game.adjustSpeed(0.2);
+            if (e.key === 'ArrowDown') game.adjustSpeed(-0.2);
+            if (e.key === 'Escape') game.reset();
+
+            // Number Blasting (Classroom Mode)
+            if (e.key >= '1' && e.key <= '9') {
+                const key = parseInt(e.key);
+                game.handleInput(key);
+                return;
+            }
+
+            // Letter Typing (Spelling Mode)
+            // Allow A-Z (case insensitive)
+            if (/^[a-zA-Z]$/.test(e.key)) {
+                game.handleTyping(e.key.toUpperCase());
+            }
+            // Backspace
+            if (e.key === 'Backspace') {
+                state.currentTyped = state.currentTyped.slice(0, -1);
+                game.updateTypingBuffer();
+                // Reset visuals if we backspace
+                state.asteroids.forEach(a => {
+                    const word = a.word.toUpperCase();
+                    if (word.startsWith(state.currentTyped) && state.currentTyped.length > 0) {
+                        const typedPart = word.substring(0, state.currentTyped.length);
+                        const restPart = word.substring(state.currentTyped.length);
+                        a.el.querySelector('.word-label').innerHTML = `<span class="word-matched">${typedPart}</span>${restPart}`;
+                    } else {
+                        a.el.querySelector('.word-label').innerText = a.word;
+                        a.el.classList.remove('locked');
+                    }
+                });
+            }
+        });
+
+        // --- AUDIO ---
+        const sfx = {
+            playLaser: () => {
+                if(audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.15);
+            },
+            playHit: () => {
+                if(audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(100, audioCtx.currentTime);
+                osc.frequency.linearRampToValueAtTime(50, audioCtx.currentTime + 0.3);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.3);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.3);
+            },
+            playStart: () => {
+                if(audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+                osc.frequency.linearRampToValueAtTime(600, audioCtx.currentTime + 0.2);
+                gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.2);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.2);
+            }
+        };
+
+        // Init
+        game.init();
+
+    </script>
+</body>
+</html>
